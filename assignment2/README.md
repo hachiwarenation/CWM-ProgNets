@@ -1,11 +1,11 @@
 # Plotting Figures
 
 
-1. Save your data a space-delimied format, such as in the example `test.data` file.
+1. It says to save data a space-delimited format, such as in the example `test.data` file, but I would rather save the logs themselves so that they have the correct labels/units.
 
 The first column contains x-axis values (e.g., time). The second column contains y-axis values (e.g., packet drops).
 
-2. Using a text editor, modify paramters in `plot.py`
+2. Using a text editor, modify parameters in `plot.py`
 
 The parameters to be modified are: 
 
