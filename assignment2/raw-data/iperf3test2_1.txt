@@ -1,0 +1,19 @@
+Connecting to host 192.168.10.2, port 5201
+[  5] local 192.168.10.1 port 35208 connected to 192.168.10.2 port 5201
+[ ID] Interval           Transfer     Bitrate         Total Datagrams
+[  5]   0.00-0.50   sec  7.07 KBytes   116 Kbits/sec  5  
+[  5]   0.50-1.00   sec  5.66 KBytes  92.7 Kbits/sec  4  
+[  5]   1.00-1.50   sec  5.66 KBytes  92.7 Kbits/sec  4  
+[  5]   1.50-2.00   sec  7.07 KBytes   116 Kbits/sec  5  
+[  5]   2.00-2.50   sec  5.66 KBytes  92.7 Kbits/sec  4  
+[  5]   2.50-3.00   sec  5.66 KBytes  92.7 Kbits/sec  4  
+[  5]   3.00-3.50   sec  7.07 KBytes   116 Kbits/sec  5  
+[  5]   3.50-4.00   sec  5.66 KBytes  92.7 Kbits/sec  4  
+[  5]   4.00-4.50   sec  5.66 KBytes  92.7 Kbits/sec  4  
+[  5]   4.50-5.00   sec  7.07 KBytes   116 Kbits/sec  5  
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Jitter    Lost/Total Datagrams
+[  5]   0.00-5.00   sec  62.2 KBytes   102 Kbits/sec  0.000 ms  0/44 (0%)  sender
+[  5]   0.00-5.04   sec  62.2 KBytes   101 Kbits/sec  0.009 ms  0/44 (0%)  receiver
+
+iperf Done.
