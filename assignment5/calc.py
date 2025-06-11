@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
+# re library is for RegEx substring matching
 import re
-
+# scapy is for handling packets
 from scapy.all import *
 
 class P4calc(Packet):
@@ -27,6 +28,9 @@ class Token:
         self.type = type
         self.value = value
 
+# takes a string s with cursor pointer at i, and a list of tokens ts
+# creates a number token to add to ts and updates the cursor position to end 
+# of number
 def num_parser(s, i, ts):
     pattern = "^\s*([0-9]+)\s*"
     match = re.match(pattern,s[i:])
@@ -35,12 +39,12 @@ def num_parser(s, i, ts):
         return i + match.end(), ts
     raise NumParseError('Expected number literal.')
 
-
+# same as above but creates an operator token instead
 def op_parser(s, i, ts):
     pattern = "^\s*([-+&|^])\s*"
     match = re.match(pattern,s[i:])
     if match:
-        ts.append(Token('num', match.group(1)))
+        ts.append(Token('num', match.group(1))) # err is there a mistake here?
         return i + match.end(), ts
     raise NumParseError("Expected binary operator '-', '+', '&', '|', or '^'.")
 
@@ -65,13 +69,14 @@ def get_if():
     return iface
 
 def main():
-
+    # in this exercise we only use simple binary op expressions
     p = make_seq(num_parser, make_seq(op_parser,num_parser))
     s = ''
     #iface = get_if()
     iface = "veth0-1"
 
     while True:
+        # emulating a Command-Line Interface
         s = input('> ')
         if s == "quit":
             break
@@ -82,9 +87,12 @@ def main():
                                               operand_a=int(ts[0].value),
                                               operand_b=int(ts[2].value))
 
-            pkt = pkt/' '
+            pkt = pkt/' ' # why stack packet onto whitespace string?
 
             #pkt.show()
+        
+            # srp1 sends an OSI L2 packet and stops listening after 1 reply
+            # Layer 2 because no need for routing 
             resp = srp1(pkt, iface=iface,timeout=5, verbose=False)
             if resp:
                 p4calc=resp[P4calc]
