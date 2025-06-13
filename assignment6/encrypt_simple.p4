@@ -11,7 +11,7 @@
  *     <--tag-->       <--cmd-->
  *     0       1       2       3               
  * +-------+-------+-------+-------+
- * |   P       4       $      e/d  |
+ * |   P       4       $     e/d/r |
  * +-------+-------+-------+-------+
  * |    data                       |
  * +-------+-------+-------+-------+
@@ -57,6 +57,7 @@ const bit<8>  P4SH_4      = 0x34;   // '4'
 const bit<8>  P4SH_DOLLAR = 0x24;
 const bit<8>  P4SH_e      = 0x65;
 const bit<8>  P4SH_d      = 0x64;
+const bit<8>  P4SH_r      = 0x72;
 
 /* And also the key until I figure out how to write it at the control plane */
 const bit<64> P4SH_KEY_E = 0xcafeacce55c0ffee;
@@ -70,6 +71,11 @@ header SecureHeader {
     bit<64> row0; // want to implement varbit in future
     bit<64> row1;
     bit<64> row2;
+    bit<64> row3; 
+    bit<64> row4;
+    bit<64> row5;
+    bit<64> row6; 
+    bit<64> row7;
 }
 
 
@@ -113,8 +119,8 @@ parser MyParser(packet_in packet,
         /* the following parse block looks if the packet is for encryption or decryption */
         
         transition select(packet.lookahead<SecureHeader>().tag) {
-            (P4SH_P ++ P4SH_4) : parse_p4sh;
-            default                    : accept;
+            P4SH_P ++ P4SH_4 : parse_p4sh;
+            default          : accept;
         }
         
     }
@@ -156,6 +162,11 @@ control MyIngress(inout headers hdr,
         hdr.p4sh.row0 = hdr.p4sh.row0 ^ P4SH_KEY_E;
         hdr.p4sh.row1 = hdr.p4sh.row1 ^ P4SH_KEY_E;
         hdr.p4sh.row2 = hdr.p4sh.row2 ^ P4SH_KEY_E;
+        hdr.p4sh.row3 = hdr.p4sh.row3 ^ P4SH_KEY_E;
+        hdr.p4sh.row4 = hdr.p4sh.row4 ^ P4SH_KEY_E;
+        hdr.p4sh.row5 = hdr.p4sh.row5 ^ P4SH_KEY_E;
+        hdr.p4sh.row6 = hdr.p4sh.row6 ^ P4SH_KEY_E;
+        hdr.p4sh.row7 = hdr.p4sh.row7 ^ P4SH_KEY_E;
         send_back();
     }
     
@@ -164,6 +175,11 @@ control MyIngress(inout headers hdr,
         hdr.p4sh.row0 = hdr.p4sh.row0 ^ P4SH_KEY_D;
         hdr.p4sh.row1 = hdr.p4sh.row1 ^ P4SH_KEY_D;
         hdr.p4sh.row2 = hdr.p4sh.row2 ^ P4SH_KEY_D;
+        hdr.p4sh.row3 = hdr.p4sh.row3 ^ P4SH_KEY_D;
+        hdr.p4sh.row4 = hdr.p4sh.row4 ^ P4SH_KEY_D;
+        hdr.p4sh.row5 = hdr.p4sh.row5 ^ P4SH_KEY_D;
+        hdr.p4sh.row6 = hdr.p4sh.row6 ^ P4SH_KEY_D;
+        hdr.p4sh.row7 = hdr.p4sh.row7 ^ P4SH_KEY_D;
         send_back();
     }
 
@@ -178,12 +194,14 @@ control MyIngress(inout headers hdr,
         actions = {
             operation_encrypt;
             operation_decrypt;
+            send_back();
             operation_drop;
         }
         const default_action = operation_drop();
         const entries = {
             P4SH_DOLLAR ++ P4SH_e : operation_encrypt();
             P4SH_DOLLAR ++ P4SH_d : operation_decrypt();
+            P4SH_DOLLAR ++ P4SH_r : send_back();
         }
     }
 

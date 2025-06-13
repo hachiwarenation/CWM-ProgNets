@@ -6,20 +6,23 @@ docu_help = """To use the program type a command word and a string, eg. $e Hello
 	|------|--------------------------|
 	| $d   | Send msg to be decrypted |
 	| $e   | Send msg to be encrypted |
+	| $r   | Send msg to be reflected |
 	| help | Display this message	  |
 	| quit | Quit program             |        
 	| :q   | Quit program             |        
 	"""
 
 # DEFAULT KEYS for program
-key_es = 0x0123456789abcdef
-key_ds = 0xcafeacce55c0ffee
+key_es = "0x0123456789abcdef"
+key_ds = "0xcafeacce55c0ffee"
 
 # PROTOCOL PARAMETERS
-data_length = 24 # in Bytes
+data_length = 64 # in Bytes
 
 # scapy for handling packets
 from scapy.all import *
+
+from math import ceil
 
 # Firstly define useful classes
 class SecureHeader(Packet):
@@ -27,8 +30,8 @@ class SecureHeader(Packet):
 	# using scapy.fields
 	fields_desc = [ StrFixedLenField("tag", default="P4", length=2),
 					StrFixedLenField("cmd", default="$$", length=2),
-					# Not fixing data length in case future variable length
-					StrField("data",default="Default entry") ] 
+					# fixing data length but in future will be variable length
+					StrFixedLenField("data",default="Default entry", length=data_length) ] 
 
 # Every packet associated with ethernet type 0x1234 is assumed to be
 # at the layer of SecureHeader
@@ -48,18 +51,31 @@ def format_simple(msg):
 def encrypt_simple(msg,key):
 	# using f-string formatting to directly get the ASCII values
 	ascii_hex = "0x"+"".join(f"{ord(char):0x}" for char in msg)
-	temp_key = "0x"+str(key)[2:]*3
+	temp_key = "0x"+str(key)[2:]*8
 	# need to use int type for bitwise XOR
 	encrypted = int(ascii_hex,16) ^ int(temp_key,16)
 	return hex(encrypted)
 
-# Apply simple decrytion
-def decrypt_simple(msg):
-	# TODO
-	decrypted = 0
-	return decrypted
+# Apply simple decryption
+def decrypt_simple(encrypted,key):
+	enc_hex = encrypted.hex()
+	#print(enc_hex)
+	temp_key = "0x"+ str(key)[2:]*8
+	print(f"THE INITIAL KEY IS {key}")
+	print(f"THE OVERALL KEY IS {temp_key}")
+	decrypted = int(enc_hex,16) ^ int(temp_key,16)
+	dec_hex = hex(decrypted)[2:]
+	print(f"THE DECRYPTED HEX IS {dec_hex}")
+	dec_msg = ""
+	for i in range(0,len(dec_hex),2):
+		window = dec_hex[i:i+2]
+		# Charater by charcter debug
+ 		#print(window, chr(int(window,16)))
+		dec_msg = dec_msg + (chr(int(window,16)))
+	print(dec_msg)
+	return dec_msg
 
-
+ 	 	
 def get_if():
 	# using scapy.interfaces
 	iface = "enx0c37965f8a16"
@@ -88,17 +104,19 @@ def main():
 			print(docu_intro)
 			print(docu_help)
 		# use try/except so that the program doesn't stop when an error occurs
-		else: #try: 
+		try: 
 			cmd, msg = inp.split(" ", maxsplit=1)
 			msg = format_simple(msg)
 			pkt = Ether(dst="e4:5f:01:8d:c8:32", type=0x1234)
 			
 			match cmd: # Is there a better way to implement this?
 				case "$d":
-					enc_msg = encrypt_simple(msg,key_ds)
-					print(f"{msg} encrypts to {enc_msg}...")
+					enc_msg = encrypt_simple(msg,key_es)
+					#print(f"{msg} encrypts to {enc_msg}...")
 					pkt = pkt / SecureHeader(cmd=cmd,data=enc_msg)
 				case "$e":
+					pkt = pkt / SecureHeader(cmd=cmd,data=msg)
+				case "$r":
 					pkt = pkt / SecureHeader(cmd=cmd,data=msg)
 				case _:
 					print("Not a supported command")	
@@ -108,19 +126,27 @@ def main():
 			
 			# srp1 sends an OSI L2 packet and stops listening after 1 reply
             # Layer 2 because no need for routing 
-			response = srp1(pkt, iface=iface,timeout=5, verbose=False)
-			print(response)
-			if response:
-				p4sh = response[SecureHeader]
+			resp = srp1(pkt, iface=iface,timeout=5, verbose=False)
+			if resp:
+				p4sh = resp[SecureHeader]
 				if p4sh:
-					print(p4sh.result)
+					print(p4sh.cmd)
+					if p4sh.cmd == b"$e":
+						dec_msg = decrypt_simple(p4sh.data,key_ds)
+						print(f"We sent {msg} which encrypts to {p4sh.data}")
+						print()
+						print(f"{p4sh.data} decrypts to {dec_msg}...")
+					elif p4sh.cmd == b"$r":
+						print(f"Reflected back is {p4sh.data}")
+					elif p4sh.cmd == b"$d":
+						print(f"{msg} encrypt")
 				else:
 					print("ERROR: cannot find SecureHeader header in packet")
 			else:
 				print("ERROR: Didn't receive response")
 			
-		#except Exception as error:
-			#print(error)
+		except Exception as error:
+			print(error)
 	
 if __name__ == "__main__":
 	main()
