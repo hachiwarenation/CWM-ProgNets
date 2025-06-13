@@ -8,27 +8,28 @@
  *
  * The Protocol header looks like this:
  *
- *     0       1       2       3    ...      7              
- * +-------+-------+-------+-------+---+--------+
- * |   P       4      e/d     n/e    data       |
- * +-------+-------+-------+-------+---+--------+
- * |    data                                    |
- * +-------+-------+-------+-------+---+--------+
- * |    ""                                      |
- * +-------+-------+-------+-------+---+--------+
- * |    ""                                      |
- * +-------+-------+-------+-------+---+--------+
+ *     <--tag-->       <--cmd-->
+ *     0       1       2       3               
+ * +-------+-------+-------+-------+
+ * |   P       4       $      e/d  |
+ * +-------+-------+-------+-------+
+ * |    data                       |
+ * +-------+-------+-------+-------+
+ * |    data                       |
+ * +-------+-------+-------+-------+
+ * |    etc.                       |
+ * +-------+-------+-------+-------+
  *
  *
  * P is ASCII Letter 'P' (0x50)
  * 4 is ASCII Letter '4' (0x34)
- * e/d are ASCII Letter 'e' or 'd'
- * n/e are ASCII Letter 'n' or 'e'
+ * $ is ASCII Letter '$' (0x24)
+ * e/d are ASCII Letter 'e' (0x65) or 'd' (0x64)
  * 
  *
- * The device receives a packet, performs an en/decryption
- * and sends the packet back out of the same port it came in on, while
- * swapping the source and destination addresses.
+ * The device receives a packet, performs an en/decryption based on the
+ * command and sends the packet back out of the same port it came in on,
+ * while swapping the source and destination addresses.
  *
  * If the header is not valid, the packet is dropped.
  */
@@ -50,18 +51,25 @@ header ethernet_t {
 }
 
 /* Define some constants here for later use */
-const bit<16> P4SH_ETYPE = 0x1234;
-const bit<8>  P4SH_P     = 0x50;   // 'P'
-const bit<8>  P4SH_4     = 0x34;   // '4'
+const bit<16> P4SH_ETYPE  = 0x1234;
+const bit<8>  P4SH_P      = 0x50;   // 'P'
+const bit<8>  P4SH_4      = 0x34;   // '4'
+const bit<8>  P4SH_DOLLAR = 0x24;
+const bit<8>  P4SH_e      = 0x65;
+const bit<8>  P4SH_d      = 0x64;
 
+/* And also the key until I figure out how to write it at the control plane */
+const bit<64> P4SH_KEY_E = 0xcafeacce55c0ffee;
+const bit<64> P4SH_KEY_D = 0x0123456789abcdef;
 
 /* Create the custom header */
 header SecureHeader {
     // I was going to use header stacks but im not smart enough :(
+    bit<16> tag;
+    bit<16> cmd;
+    bit<64> row0; // want to implement varbit in future
     bit<64> row1;
     bit<64> row2;
-    bit<64> row3;
-    bii<64> row4;
 }
 
 
@@ -104,9 +112,8 @@ parser MyParser(packet_in packet,
     state check_p4sh {
         /* the following parse block looks if the packet is for encryption or decryption */
         
-        transition select(packet.lookahead<SecureHeader>().data[0:7],
-        packet.lookahead<SecureHeader>().data[8:15]) {
-            (P4SH_P, P4SH_4) : parse_p4sh;
+        transition select(packet.lookahead<SecureHeader>().tag) {
+            (P4SH_P ++ P4SH_4) : parse_p4sh;
             default                    : accept;
         }
         
@@ -136,15 +143,27 @@ control MyIngress(inout headers hdr,
     bit<48> temp;
     
     action send_back() {
-        /* */
+        /* Swaps MAC addresses and port */
           temp = hdr.ethernet.dstAddr;
           hdr.ethernet.dstAddr = hdr.ethernet.srcAddr;
           hdr.ethernet.srcAddr = temp;
           standard_metadata.egress_spec = standard_metadata.ingress_port;
     }
 
-    action operation_xor() {
-        /* operand_a ^ operand_b */
+    action operation_encrypt() {
+        /* XOR with encryption key */
+        // There is definitely a better way to implement this... a for loop?
+        hdr.p4sh.row0 = hdr.p4sh.row0 ^ P4SH_KEY_E;
+        hdr.p4sh.row1 = hdr.p4sh.row1 ^ P4SH_KEY_E;
+        hdr.p4sh.row2 = hdr.p4sh.row2 ^ P4SH_KEY_E;
+        send_back();
+    }
+    
+    action operation_decrypt() {
+        /* XOR with decryption key */
+        hdr.p4sh.row0 = hdr.p4sh.row0 ^ P4SH_KEY_D;
+        hdr.p4sh.row1 = hdr.p4sh.row1 ^ P4SH_KEY_D;
+        hdr.p4sh.row2 = hdr.p4sh.row2 ^ P4SH_KEY_D;
         send_back();
     }
 
@@ -154,28 +173,22 @@ control MyIngress(inout headers hdr,
 
     table calculate {
         key = {
-            hdr.p4calc.op        : exact;
+            hdr.p4sh.cmd        : exact;
         }
         actions = {
-            operation_add;
-            operation_sub;
-            operation_and;
-            operation_or;
-            operation_xor;
+            operation_encrypt;
+            operation_decrypt;
             operation_drop;
         }
         const default_action = operation_drop();
         const entries = {
-            P4CALC_PLUS : operation_add();
-            P4CALC_MINUS: operation_sub();
-            P4CALC_AND  : operation_and();
-            P4CALC_OR   : operation_or();
-            P4CALC_CARET: operation_xor();
+            P4SH_DOLLAR ++ P4SH_e : operation_encrypt();
+            P4SH_DOLLAR ++ P4SH_d : operation_decrypt();
         }
     }
 
     apply {
-        if (hdr.p4calc.isValid()) {
+        if (hdr.p4sh.isValid()) {
             calculate.apply();
         } else {
             operation_drop();
@@ -206,7 +219,7 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
 control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
-        packet.emit(hdr.p4calc);
+        packet.emit(hdr.p4sh);
     }
 }
 
